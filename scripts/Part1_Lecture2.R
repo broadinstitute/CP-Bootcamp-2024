@@ -12,87 +12,158 @@
 # Growth dynamics example
 # ----
 
-# let's ASSUME the growth rates are independent from the seeding and pooling 
-cell_line_data <- data.frame(cell_line = paste0("c", 1:100), 
-           growth_rate = runif(100, .5, 5),
-           pool = rep(paste0("p", 1:5), each = 20))
+
+# Let's create some cell line data: 
+
+cell_line_data <- data.frame(cell_line = paste0("c", 1:100), # cell line index
+                             growth_rate = runif(100, 0.5, 5), # doubling per day
+                             lag_period = rexp(100, 1), # in days
+                             initial_cell_count = sample(c(25,50,100), 100, replace = TRUE, prob = c(0.25, 0.5, 0.25)))
 
 
-pool_data <- data.frame(pool = paste0("p", 1:5),
-           initial_cc = c(25,25,25,50,100),
-           lysate_proportion = c(0.2, 0.2 ,0.2 , 0.2, 0.2) )
+cell_line_data$lag_period %>%
+  sort() %>% 
+  plot(type = "s")
+
 
 assay_end_point <- 5
-pcr_bottleneck <- 1e6
+pcr_bottleneck <- 2e4
+seq_depth <- 1e6
+threshold <- 40 * seq_depth / pcr_bottleneck
 
-
-
-cell_line_data$total_growth <- 2^(cell_line_data$growth_rate * assay_end_point)
-
-for(pool %in% pool_data$pool){
+# First attempt (planning)
+simulate_experiment <- function(){
   
-}
-
-
-
-cell_line_data$pool
-
-
-pool_data$initial_cc
-
-
-grow_cells <- function(cell_line_data, assay_end_point){
+  # calculate cell counts at the end-point
+  lysate_cell_counts <- simulate_growth()
   
+  # simulate the pcr bottleneck
+  pcr_counts <- simulate_pcr()
   
-  return(final_population)
-}
-
-
-
-lysate_bottleneck <- function(cell_line_data, pool_data,
-                              final_population, pcr_bottleneck){
+  # simulate sequencing
+  sequencing_counts <- simulate_sequencing()
   
-  return(pcr_input)
-}
-
-
-
-# Slot machine example (Conditional statements)
-# ----
-
-# we will create a slot machine
-play <- function() {
+  # visualize final population
+  hist(sequencing_counts, 100)
   
-  # step 1: generate symbols
-  symbols <- get_symbols()
-  
-  # step 2: display the symbols
-  print(symbols)
-  
-  # step 3: score the symbols
-  score(symbols)
+  # count the detected cell lines
+  detected_lines <- count_detected()
 }
 
 
 
 
-# first part is relatively easy
-get_symbols <- function() {
-  wheel <- c("DD", "7", "BBB", "BB", "B", "C", "0")
-  sample(wheel, size = 3, replace = TRUE, 
-         prob = c(0.03, 0.03, 0.06, 0.1, 0.25, 0.01, 0.52))
+# Second attempt (let's put the arguments in place)
+simulate_experiment <- function(cell_line_data, 
+                                assay_end_point, pcr_bottleneck, seq_depth, 
+                                threshold){
+  
+  # calculate cell counts at the end-point
+  lysate_cell_counts <- simulate_growth(cell_line_data, assay_end_point)
+  
+  # simulate the pcr bottleneck
+  pcr_counts <- simulate_pcr(lysate_cell_counts, pcr_bottleneck)
+  
+  # simulate sequencing
+  sequencing_counts <- simulate_sequencing(pcr_counts, seq_depth)
+  
+  # visualize final population
+  plot(log10(sort(sequencing_counts)), type = "h")
+  
+  # count the detected cell lines
+  detected_lines <- count_detected(sequencing_counts, threshold)
+  
+  return(detected_lines)
 }
 
-symbols <- get_symbols()
 
-print(symbols)
+threshold
 
-# tiny bit fancier, please check ?paste0()
-print_symbols <- function(symbols) {
-  print(paste0(symbols, collapse = " - "))
+lysate_cell_counts %>% sum
+
+# Let's fill in the other functions: 
+
+simulate_growth <- function(cell_line_data, assay_end_point){
+  
+  growth_period <- assay_end_point - cell_line_data$lag_period
+  
+  final_cell_count <- cell_line_data$initial_cell_count * 2^(cell_line_data$growth_rate * growth_period)
+  
+  # plot(sort(final_cell_count), type = "h")
+  return(final_cell_count)
 }
 
-# score is the trickier part, we need to be able to CHOOSE which path to follow:
+simulate_pcr <- function(lysate_cell_counts, pcr_bottleneck){
+  # note there is some room for improvement for this one ! 
+  n <- length(lysate_cell_counts)
+  sampled_cells <- sample(1:n, size = pcr_bottleneck, replace = TRUE, prob = lysate_cell_counts)
+  
+  sampled_table <- table(sampled_cells)
+  pcr_counts = rep(0, n); names(pcr_counts) = 1:n
+  pcr_counts[names(sampled_table)] <- sampled_table
+  
+  plot(log2(lysate_cell_counts), log2(pcr_counts))
+  
+  return(pcr_counts)
+}
+
+simulate_sequencing <- function(pcr_counts, seq_depth){
+  
+  n <- length(pcr_counts)
+  sampled_cells <- sample(1:n, size = seq_depth, replace = TRUE, prob = pcr_counts)
+  
+  sampled_table <- table(sampled_cells)
+  seq_counts = rep(0, n); names(seq_counts) = 1:n
+  seq_counts[names(sampled_table)] <- sampled_table
+  
+  plot(log2(pcr_counts), log2(seq_counts))
+  plot(sort(log10(1 + seq_counts)), type = "h")
+  
+  return(seq_counts)
+}
+
+count_detected <- function(sequencing_counts, threshold){
+  which(sequencing_counts >= threshold) 
+}
+
+
+# Let's make a final iteration on the original plan to have more comprehensive return: 
+
+# Third attempt (polishing up)
+simulate_experiment_2 <- function(cell_line_data, 
+                                assay_end_point = 5, pcr_bottleneck = 2e4, seq_depth = 1e6, 
+                                threshold = 2e3){
+  
+  # calculate cell counts at the end-point
+  cell_line_data$lysate_cell_counts <- simulate_growth(cell_line_data, assay_end_point)
+  
+  # simulate the pcr bottleneck
+  cell_line_data$pcr_counts <- simulate_pcr(cell_line_data$lysate_cell_counts, pcr_bottleneck)
+  
+  # simulate sequencing
+  cell_line_data$sequencing_counts <- simulate_sequencing(cell_line_data$pcr_counts, seq_depth)
+
+  # identify the well detected lines
+  cell_line_data$is_detected <- cell_line_data$sequencing_counts >= threshold
+
+  return(list(cell_line_data = cell_line_data,
+              number_of_detected_lines = sum(cell_line_data$is_detected)))
+}
+
+
+result <- simulate_experiment(cell_line_data)
+
+result$number_of_detected_lines
+result$cell_line_data %>% View
+
+
+
+# -----
+# Conditionals
+# -----
+
+
+# We use conditionals when we need to CHOOSE which path to follow:
 # some warm-up with conditional statements
 
 num <- -2
@@ -147,6 +218,7 @@ if (x == 1) {
 }
 x
 
+
 # we can add a B plan with "else" statement
 
 a <- 3.14
@@ -174,100 +246,48 @@ if (a > b) {
   print("Tie.")
 }
 
-
-# now are are ready to write the score function:
-score <- function(symbols) {
-
-# calculate a prize
-
-prize
+# classical interview question: 
+fizzbuzz <- function(x){
+  
 }
-
-
 
 # solution
-score <- function(symbols) {
-  prize <- 0
-  if(length(unique(symbols)) == 1){
-    # three of a kind
-    symbol <- symbols[1]
-    if (symbol == "DD") {
-      prize <- 100
-    } else if (symbol == "7") {
-      prize <- 80
-    } else if (symbol == "BBB") {
-      prize <- 40
-    } else if (symbol == "BB") {
-      prize <- 25
-    } else if (symbol == "B") {
-      prize <- 10
-    } else if (symbol == "C") {
-      prize <- 10
-    } else {
-      prize <- 0
-    }
-  } else if(all(symbols %in% c("B", "BB", "BBB"))){
-    # all bars but not three of a kind
-    prize <- 5
-  } else{
-    cherries <- sum(symbols == "C")
-    if (cherries == 2) {
-      prize <- 5
-    } else if (cherries == 1) {
-      prize <- 2
-    } else {
-      prize <- 0
-    }
+fizzbuzz <- function(x){
+  if(x %% 15 == 0){
+    print("FizzBuzz")
+  }else if(x %% 5 == 0){
+    print("Fizz")
+  }else if(x %% 3 == 0){
+    print("Buzz")
+  }else{
+    print(x)
+  }
+}
+    
+
+
+# Sometimes using a look-up table makes the code less clunky
+# Please use tricks to make your code more efficient and readable, not shorter!
+
+print_die <- function(x){
+  if(x == 1){
+    print("One")
+  }else if(x == 2){
+    
+  } ....
+}
+
+print_die2 <- function(x){
+  face = 1:6; names(face) = c("one", "two", "three", "four", "five", "six")
+  
+  if(x %in% 1:6){
+    print(face[ix])
+  }else{
+    print("Input is not between 1 and 6!")
   }
   
-  # counts the diamonds
-  diamonds <- sum(symbols == "DD")
-  
-  # calculate the prize
-  prize <- prize * 2^diamonds
-  
-  prize
-  
 }
 
-play <- function() {
-  symbols <- get_symbols()
-  print_symbols(symbols)
-  score(symbols)
-}
-
-simulated_prizes = replicate(1000, play())
-summary(simulated_prizes)
-ggplot2::qplot(simulated_prizes, binwidth = 1)
-
-
-# we can simplify our code by using look-up tables
-# please use tricks to make your code more efficient and readable, not shorter!
-score <- function(symbols) {
-  
-  prize <- 0
-  if(length(unique(symbols)) == 1){
-    # three of a kind
-    payouts <- c("DD" = 100, "7" = 80, "BBB" = 40, 
-                 "BB" = 25, "B" = 10, "C" = 10, "0" = 0)
-    prize <- payouts[symbols[1]]
-  } else if(all(symbols %in% c("B", "BB", "BBB"))){
-    # all bars but not three of a kind
-    prize <- 5
-  } else{
-    cherries <- sum(symbols == "C")
-    prize <- c(0, 2, 5)[cherries + 1]
-  }
-  
-  # counts the diamonds
-  diamonds <- sum(symbols == "DD")
-  
-  # correct the prize
-  prize <- prize * 2^diamonds
-  
-  prize
-  
-}
 
 # ----
 # Expected values (Loops)
@@ -303,41 +323,14 @@ rolls %>% head
 # expected value of the outcome 
 sum(rolls$value * rolls$prob)
 
+# practice: should we write a print function for the roll of a pair of dies ?
 
 
-# next we will repeat the same exercise for the slot machine using the score function
-# 1. list out every possible outcome of playing the machine. 
-# 2. calculate the probability of getting each combination when you play the machine.
-# 3. determine the prize that we would win for each combination
-
-# list the combinations
-wheel <- c("DD", "7", "BBB", "BB", "B", "C", "0")
-combos <- expand.grid(wheel, wheel, wheel, stringsAsFactors = F)
-combos %>% head
-combos %>% tail()
-
-# calculate the probability for each combination
-prob <- c("DD" = 0.03, "7" = 0.03, "BBB" = 0.06, 
-          "BB" = 0.1, "B" = 0.25, "C" = 0.01, "0" = 0.52)
-
-combos$prob1 <- prob[combos$Var1]
-combos$prob2 <- prob[combos$Var2]
-combos$prob3 <- prob[combos$Var3]
-
-combos$prob <- combos$prob1 * combos$prob2 * combos$prob3
-
-combos %>% head()
-sum(combos$prob) # sanity check!
 
 
-# calculate the scores
-# first let's try to compute the prize for the first row
-symbols <- c(combos[1,1], combos[1,2], combos[1,3])
-symbols
-score(symbols)
-# we need to apply score function for EACH row of the combos data frame
 
-# we can do this with a for loop
+# When we need to run a function for EACH row of a dataset, we can use a loop.
+# Here is a for loop:
 
 for (value in c("My", "first", "for", "loop")) {
   print("one run")
@@ -369,84 +362,43 @@ for (i in 1:4) {
 }
 
 
-# let's use this to calculate the expected return on a dollar 
-combos$prize <- NA
-head(combos, 3)
+# Sometimes we need to run a loop not to iterate over a fixed list, but till a condition is satisfied
 
-for (i in 1:nrow(combos)) {
-  symbols <- c(combos[i, 1], combos[i, 2], combos[i, 3])
-  combos$prize[i] <- score(symbols)
-}
+# Let's roll a pair of dice till we get a pair of sixes
 
-combos %>% head()
-sum(combos$prize * combos$prob)
 
-## CHALLENGE: modify score function to count diamonds (DD) as wild symbol and re-calculate the expected return
-
-score <- function(symbols) {
-  
-  diamonds <- sum(symbols == "DD")
-  cherries <- sum(symbols == "C")
-  
-  # identify case
-  # since diamonds are wild, only nondiamonds 
-  # matter for three of a kind and all bars
-  slots <- symbols[symbols != "DD"]
-  same <- length(unique(slots)) == 1
-  bars <- slots %in% c("B", "BB", "BBB")
-  
-  # assign prize
-  if (diamonds == 3) {
-    prize <- 100
-  } else if (same) {
-    payouts <- c("7" = 80, "BBB" = 40, "BB" = 25,
-                 "B" = 10, "C" = 10, "0" = 0)
-    prize <- unname(payouts[slots[1]])
-  } else if (all(bars)) {
-    prize <- 5
-  } else if (cherries > 0) {
-    # diamonds count as cherries
-    # so long as there is one real cherry
-    prize <- c(0, 2, 5)[cherries + diamonds + 1]
-  } else {
-    prize <- 0
+roll_till_six_six <- function() {
+  dice = sample(6,2, replace = TRUE)
+  count = 1
+  while(sum(dice) != 12){
+    dice = sample(6,2, replace = TRUE)
+    count = count + 1
   }
-  
-  # double for each diamond
-  prize * 2^diamonds
+  count
 }
 
-# while loops iterates as long as the condition is true
-# here is an example to see how long we can play till we go broke
+simulated_rolls <- replicate(100, roll_till_six_six())
 
-plays_till_broke <- function(start_with) {
-  cash <- start_with
-  n <- 0
-  while (cash > 0) {
-    cash <- cash - 1 + play()
-    n <- n + 1
-  }
-  n
-}
-
-plays_till_broke(100)
+hist(simulated_rolls, 100)
+plot(simulated_rolls, type = "h")
 
 
-# we can write the same function with a repeat loop as well, it does exactly same job but it is more cumbersome
-plays_till_broke <- function(start_with) {
-  cash <- start_with
-  n <- 0
-  repeat {
-    cash <- cash - 1 + play()
-    n <- n + 1
-    if (cash <= 0) {
+# We can write the same function with a repeat loop as well, it does exactly same job but it is more cumbersome
+
+roll_till_six_six <- function() {
+  count = 0
+  repeat{
+    dice = sample(6,2, replace = TRUE)
+    count = count + 1
+    if(sum(dice) != 12){
       break
     }
   }
-  n
+  count
 }
 
-plays_till_broke(100)
+
+
 
 # ----
 # Speed
@@ -478,6 +430,31 @@ system.time(abs_loop(long))
 system.time(abs_sets(long))
 
 system.time(abs(long)) # note most R functions are already vectorized
+
+
+
+
+
+
+
+# TO BE EDITED! ------
+
+
+
+
+# is our function vectorized? 
+fizzbuzz2(45:50)
+
+fizzbuzz2 <- function(x){
+  y = as.character(x)
+  y[x %% 5 == 0] <- "Fizz"
+  y[x %% 3 == 0] <- "Buzz"
+  y[x %% 15 == 0] <- "FizzBuzz"
+  print(y)
+}
+
+
+
 
 
 # here is another simple example
