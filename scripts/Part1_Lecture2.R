@@ -15,6 +15,7 @@
 
 # Let's create some cell line data: 
 
+
 cell_line_data <- data.frame(cell_line = paste0("c", 1:100), # cell line index
                              growth_rate = runif(100, 0.5, 5), # doubling per day
                              lag_period = rexp(100, 1), # in days
@@ -54,9 +55,7 @@ simulate_experiment <- function(){
 
 
 # Second attempt (let's put the arguments in place)
-simulate_experiment <- function(cell_line_data, 
-                                assay_end_point, pcr_bottleneck, seq_depth, 
-                                threshold){
+simulate_experiment <- function(cell_line_data,  assay_end_point, pcr_bottleneck, seq_depth,  threshold){
   
   # calculate cell counts at the end-point
   lysate_cell_counts <- simulate_growth(cell_line_data, assay_end_point)
