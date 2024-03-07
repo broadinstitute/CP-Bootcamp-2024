@@ -1,0 +1,274 @@
+---
+title: "Analyzing_TCGA_data"
+format: html
+editor: visual
+---
+
+## Install packages required for analyses
+
+```{r}
+if (!requireNamespace("BiocManager", quietly=TRUE))
+    install.packages("BiocManager")
+BiocManager::install("TCGAbiolinks")
+BiocManager::install("DESeq2")
+```
+
+## Load libraries required for analyses
+
+```{r}
+library(TCGAbiolinks)
+library(DESeq2)
+library(dplyr)
+library(DT)
+```
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Check out the available molecular datasets
+
+```{r}
+subtypes <- PanCancerAtlas_subtypes()
+
+head(subtypes)
+
+```
+
+Which molecular data is available?
+
+Which cancer types are available? How many samples from each cancer types are provided?
+
+```{r}
+unique(subtypes$cancer.type)
+table(subtypes$cancer.type)
+
+```
+
+## Assess confounders in transcriptome data
+
+Download the TCGA GBM data
+
+```{r}
+
+proj <- "TCGA-GBM"
+query <- GDCquery(
+    project = proj,
+    data.category = "Transcriptome Profiling", 
+    data.type = "Gene Expression Quantification",
+    workflow.type = "STAR - Counts"
+)
+GDCdownload(query)
+data <- GDCprepare(query)
+
+head(data)
+```
+
+View count data and metadata
+
+```{r}
+
+head(assay(data))
+head(colData(data))
+```
+
+For how many donors transcriptome data are provided? How many genes are given?
+
+```{r}
+dim(assay(data))
+```
+
+How can you find genes with low counts? (e.g. expressed 10 counts in less than 5% of individuals )
+
+```{r}
+
+# Define an empty vector with 'genes' variable name
+genes <- c()
+
+# Function to find how many individuals with at least 10 counts
+countGene <- function(x) {
+  l = length(which(x >= 10))
+  return(l)
+}
+
+# First solution
+for (j in 1:nrow(assay(data))) {
+  r <- countGene(assay(data)[j,])
+  genes <- c(genes, r)
+}
+# Second solution
+
+genes <- apply(as.matrix(assay(data)), 1, countGene)
+
+# Add gene names per count
+names(genes) <- rownames(assay(data))
+low_count_genes <- names(genes)[which(genes <= ncol(assay(data))*0.05)]
+
+```
+
+Which gene did show highest expression in average?
+
+```{r}
+
+# First solution
+
+mean_expression <- c()
+
+for (j in 1:nrow(assay(data))) {
+  m <- mean(assay(data)[j,])
+  mean_expression<- c(mean_expression, m)
+}
+
+# Second solution
+
+mean_expression <- rowMeans((assay(data)))
+
+# Add gene names per count
+names(mean_expression) <- rownames(assay(data))
+names(mean_expression)[which(mean_expression == max(mean_expression))]
+```
+
+Which gene did show highest variation across individuals?
+
+```{r}
+
+# First solution
+
+sd_expression <- c()
+
+for (j in 1:nrow(assay(data))) {
+  sd <- sd(assay(data)[j,])
+  sd_expression<- c(sd_expression, sd)
+}
+
+# Second solution
+
+sd_expression <- rowSds((assay(data)))
+
+# Add gene names per count
+names(sd_expression) <- rownames(assay(data))
+names(sd_expression)[which(sd_expression == max(sd_expression))]
+
+```
+
+Normalize counts and perform PCA to cluster genes based on tumor type, tissue type and IDH status
+
+```{r}
+
+# Create a DESeqDataset
+dds <- SummarizedExperiment(assays = assay(data), colData=colData(data))
+dds <- DESeqDataSet(dds, design = ~1)
+
+# Estimate size factors 
+dds <- estimateSizeFactors(dds)
+
+# Perform VST normalization
+vsd <- vst(dds)
+
+# Perform PCA analysis
+pc_data <- prcomp(t(assay(vsd)))
+```
+
+```{r}
+library(ggplot2)
+
+data_plot <- data.frame(PC1 = pc_data$x[,1],
+                        PC2 = pc_data$x[,2],
+                        tissue = data$tissue_type,
+                        idh = data$paper_IDH.status,
+                        type = data$sample_type,
+                        gender = data$gender,
+                        ancestry = data$ethnicity)
+
+ggplot(data_plot, aes(x=PC1, y=PC2, color = tissue)) +
+  geom_point() + 
+  scale_color_manual(values = c("purple","green"))
+
+ggplot(data_plot, aes(x=PC1, y=PC2, color = idh)) +
+  geom_point() + 
+  scale_color_manual(values = c("blue","red","black"))
+
+ggplot(data_plot, aes(x=PC1, y=PC2, color = type)) +
+  geom_point() + 
+  scale_color_manual(values = c("blue","red","black"))
+```
+
+Assess potential confounders on gene expression
+
+```{r}
+
+# Gender
+lm <- lm(data_plot$PC1 ~ data_plot$gender)
+summary(lm)
+
+lm <- lm(data_plot$PC2 ~ data_plot$gender)
+summary(lm)
+
+# Ancestry
+
+lm <- lm(data_plot$PC1 ~ as.factor(data_plot$ancestry))
+summary(lm)
+
+lm <- lm(data_plot$PC2 ~ as.factor(data_plot$ancestry))
+summary(lm)
+
+# Tumor type
+
+lm <- lm(data_plot$PC1 ~ as.factor(data_plot$type))
+summary(lm)
+
+lm <- lm(data_plot$PC2 ~ as.factor(data_plot$type))
+summary(lm)
+
+```
+
+## Perform differential gene expression analysis
+
+Remove samples with NAs annotation
+
+```{r}
+data <- data[,!is.na(data$paper_IDH.status)]
+```
+
+Perform differential expression analysis
+
+```{r}
+ddsSE <- DESeqDataSet(data, design = ~ paper_IDH.status)
+```
+
+```{r}
+
+keep <- rowSums(counts(ddsSE)) >= 10
+ddsSE <- ddsSE[keep,]
+ddsSE <- DESeq(ddsSE)
+
+```
+
+```{r}
+
+resultsNames(ddsSE)
+
+```
+
+```{r}
+res <- results(ddsSE, name = "paper_IDH.status_WT_vs_Mutant")
+dea <- as.data.frame(res)
+summary(res)
+```
+
+Make a volcano plot
+
+```{r}
+
+res_tableOE_tb <- data.frame(res) %>% 
+                  dplyr::mutate(threshold_OE = padj < 0.05 & 
+                                  abs(log2FoldChange) >= 0.5)
+
+ggplot(res_tableOE_tb) +
+    geom_point(aes(x = log2FoldChange, y = -log10(padj), colour = threshold_OE)) +
+    ggtitle("IDH status") +
+    xlab("log2 fold change") + 
+    ylab("-log10 adjusted p-value") +
+    #scale_y_continuous(limits = c(0,50)) +
+    theme(legend.position = "none",
+          plot.title = element_text(size = rel(1.5), hjust = 0.5),
+          axis.title = element_text(size = rel(1.25)))  
+```

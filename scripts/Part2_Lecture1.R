@@ -1,8 +1,8 @@
 # ----
-# CP BOOTCAMP 2023 : INTRODUCTION TO TIDYVERSE - LECTURE 2
+# CP BOOTCAMP 2024 : INTRODUCTION TO TIDYVERSE - LECTURE 2
 # Author: Mustafa A. Kocak
 # Date: March 6, 2024
-# Description: Introduction to tidy-verse - First 8 chapters of r4ds 1st ed
+# Description: Introduction to tidy-verse - Chapter 9 - Visualization 
 # ----
 
 #install.packages("tidyverse")
@@ -363,9 +363,20 @@ demo <- data.frame( cut = c("Fair", "Good", "Very Good", "Premium", "Ideal"),
 ggplot(data = demo) +
   geom_bar(mapping = aes(x = cut, y = freq), stat = "identity")
 
+diamonds %>%
+  dplyr::count(cut) %>% 
+  ggplot() +
+  geom_bar(aes(x = cut, y = n), stat = "identity")
+
 #  You may want to use other transformed variables - confusing! 
+diamonds %>%
+  ggplot() +
+  geom_bar(aes(x = cut, y = after_stat(prop), group = 1))
+
+# this works too
 ggplot(data = diamonds) + 
   geom_bar(mapping = aes(x = cut, y = stat(prop), group = 1))
+
 
 # You might want to draw greater attention to the statistical transformation in your code. 
 ggplot(data = diamonds) + 
@@ -374,6 +385,7 @@ ggplot(data = diamonds) +
     fun.min = min,
     fun.max = max,
     fun = median)
+
 
 # Exercises
 # 1. What is the default geom associated with stat_summary()? 
@@ -509,4 +521,4 @@ dat %>%
 
 
 
-
+# Practice: https://simplystatistics.org/posts/2019-08-28-you-can-replicate-almost-any-plot-with-ggplot2/
