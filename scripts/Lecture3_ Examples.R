@@ -1,4 +1,10 @@
 
+# ----
+# CP BOOTCAMP 2024 : INTRODUCTION TO TIDYVERSE - LECTURE 3
+# Author: Mustafa A. Kocak
+# Date: March 8, 2024
+# Description: Examples with DepMap data
+# ----
 
 # PLAN FOR TODAY ----
 # Load the libraries we will use

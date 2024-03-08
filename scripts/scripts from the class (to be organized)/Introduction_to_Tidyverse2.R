@@ -532,6 +532,249 @@ table5 %>%
 
 
 
+# Missing values (explicit vs implicit) ----
+
+stocks <- tibble(
+  year = c(2015,2015,2015,2015, 2016, 2016, 2016),
+  qtr = c(1,2,3,4,2,3,4),
+  return = c(1.88, 0.59, 0.35, NA, 0.9, .16, 2.5)
+)
+
+# NA's became explicit in the wider form
+stocks %>%
+  tidyr::pivot_wider(names_from = year, values_from = return)
+
+
+stocks %>%
+  tidyr::pivot_wider(names_from = year, values_from = return) %>% 
+  tidyr::pivot_longer(cols = 2:3,
+                      names_to = "year",
+                      values_to = "return",
+                      values_drop_na = TRUE) 
+
+stocks %>%
+  tidyr::complete(year, qtr)
+
+
+# RELATIONAL DATA ------
+
+# checking if keys  actually identifies each observation
+planes %>%
+  dplyr::count(tailnum) %>% 
+  dplyr::filter(n > 1)
+
+weather %>%
+  dplyr::count(origin, year, month, day, hour) %>%
+  dplyr::filter(n > 1)
+
+
+flights %>% 
+  dplyr::count(flight, time_hour, carrier) %>%
+  dplyr::filter(n > 1)
+
+
+flights %>% 
+  dplyr::mutate(row_index = 1:nrow(flights),
+                .before = year) 
+
+
+
+# let's work with a trimmed dataset
+
+flights2 <- flights %>% 
+  dplyr::select(year:day, hour, origin, dest, tailnum, carrier)
+
+flights2
+
+airlines
+
+# Don't do this anymore
+airline_names <- airlines$name
+names(airline_names) <- airlines$carrier
+flights2 %>% 
+  dplyr::mutate(name = airline_names[flights2$carrier])
+
+
+flights2 %>% 
+  dplyr::left_join(airlines)
+
+
+# toy datasets
+x <- tibble(key = 1:3,
+            val_x = c("x1", "x2", "x3"))
+
+y <- tibble(key = c(1,2,4),
+            val_y = c("y1", "y2", "y3"))
+
+x
+y
+
+
+dplyr::left_join(x, y)
+
+x %>% 
+  dplyr::left_join(y)
+
+x %>% 
+  dplyr::right_join(y)
+
+x %>% 
+  dplyr::inner_join(y)
+
+x %>% 
+  dplyr::full_join(y)
+
+# we can explicitly specify the keys to join
+x %>% 
+  dplyr::inner_join(y, by = join_by("key"))
+
+
+# how the duplicate keys behave? 
+x <- tibble(key = c(1,2,2,1),
+            val_x = c("x1", "x2", "x3", "x4"))
+
+y <- tibble(key = c(1,2),
+            val_y = c("y1", "y2"))
+
+x
+y
+
+x %>%
+  dplyr::left_join(y)
+
+
+flights2
+weather
+planes
+airports %>% View
+
+# all the common column names
+dplyr::left_join(flights2, weather)
+
+dplyr::left_join(flights2, planes,
+                 by = join_by("tailnum"))
+
+
+dplyr::left_join(flights2, airports,
+                 by = c("origin" = "faa")) 
+
+dplyr::left_join(flights2, airports,
+                 by = c("dest" = "faa")) 
+
+dplyr::left_join(flights2, weather,
+                 by = c("month", "day", "origin"))
+
+
+# Filtering joins -----
+
+x
+y
+
+dplyr::semi_join(x,y)
+dplyr::anti_join(x,y)
+
+x <- tibble(key = 1:3,
+            val_x = c("x1", "x2", "x3"))
+
+y <- tibble(key = c(1,2,4),
+            val_y = c("y1", "y2", "y3"))
+
+
+
+x
+y
+
+dplyr::semi_join(x,y)
+dplyr::anti_join(x,y)
+
+
+top_dest <- flights %>% 
+  dplyr::count(dest, sort = TRUE) %>% 
+  head(10)
+
+top_dest <- flights %>% 
+  dplyr::count(dest) %>% 
+  dplyr::arrange(desc(n)) %>% 
+  head(10)
+
+top_dest
+
+flights2 %>% 
+  dplyr::filter(dest %in% top_dest$dest)
+
+flights2 %>% 
+  dplyr::semi_join(top_dest)
+
+
+flights2
+planes
+
+
+dplyr::anti_join(flights2, planes, by = "tailnum") %>%
+  dplyr::count(tailnum, sort = TRUE) %>%
+  drop_na() %>% 
+  ggplot() +
+  geom_histogram(aes(x = n), binwidth = 1)
+
+
+
+# Set operations -----
+
+x <- 1:10
+y <- rep(5:15, each = 2)
+
+x
+y
+
+
+intersect(x,y)
+union(x,y)
+setdiff(x,y)
+setdiff(y,x)
+unique(y)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
