@@ -40,7 +40,6 @@ options(taigaclient.path=path.expand("/Users/mkocak/anaconda3/envs/taigapy/bin/t
 Model <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='Model')
 
 
-
 # Genetic dependencies
 CRISPRGeneDependency <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='CRISPRGeneDependency')
 CRISPRGeneEffect <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='CRISPRGeneEffect')
@@ -88,7 +87,8 @@ compound.metadata <- load.from.taiga(data.name='compound-metadata-de37', data.ve
 # PRISM OncRef
 OncRef.Compound.List <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=14, data.file='PRISM_Oncology_Reference_23Q4-Compound_List')
 OncRef.AUC.matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='AUC_matrix') %>%
-  t()
+  t() 
+  
 OncRef.LFC.Matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='PRISM_Oncology_Reference_23Q4_LFC_Matrix')
 
 
@@ -107,6 +107,17 @@ compound_metadata <- compound.metadata %>%
   tidyr::separate_rows(IDs, sep = ";") 
 
 
+compound.metadata %>%  
+  dplyr::distinct(Drug.Name,
+                  IDs, MOA, 
+                  repurposing_target, 
+                  Synonyms) %>% 
+  dplyr::rename(Target = repurposing_target) %>%
+  tidyr::separate_rows(IDs, sep = ";")  %>% 
+  View
+
+
+
 # Vignette 1: Which mutations are occuring or not occuring together ----
 
 OmicsSomaticMutationsMatrixHotspot %>% corner
@@ -115,12 +126,16 @@ OmicsSomaticMutationsMatrixHotspot %>% corner
 colnames(OmicsSomaticMutationsMatrixHotspot)  %<>% word()
 
 
-
+dim(OmicsSomaticMutationsMatrixHotspot)
 
 # let's start with a simple example: KRAS and EGFR
 EGFR.KRAS.mutations <- OmicsSomaticMutationsMatrixHotspot[, c("EGFR", "KRAS")] %>% 
-  as.tibble() %>% 
+  as_tibble() %>% 
   dplyr::mutate(ModelID = rownames(OmicsSomaticMutationsMatrixHotspot)) 
+
+EGFR.KRAS.mutations %>% 
+  head
+
 
 
 # What does 2 mean?
@@ -137,7 +152,7 @@ EGFR.KRAS.mutations %>%
 
 # Do we have enough power to support our claim?
 EGFR.KRAS.mutations %>% 
-  dplyr::count(EGFR, KRAS) %>% 
+  dplyr::count(EGFR, KRAS) %>%
   tidyr::complete(EGFR,KRAS, fill = list(n = 0)) %>% 
   .$n %>% matrix(2) %>%   
   fisher.test()
@@ -160,7 +175,6 @@ n = nrow(HS.Mutations)
 gene1 = "EGFR"
 gene2 = "KRAS"
 
-
 # a  helper function to compute the contingency matrix
 contingency_matrix <- function(gene1, gene2) {
   # note that we are keeping n and co.occurances matrix as global variables
@@ -175,6 +189,9 @@ contingency_matrix <- function(gene1, gene2) {
 }
 
 contingency_matrix("EGFR", "KRAS")
+contingency_matrix("BRAF", "PTEN")
+
+
 
 # another helper to wrap the fisher's test 
 is_powered_enough<- function(gene1, gene2) {
@@ -182,6 +199,13 @@ is_powered_enough<- function(gene1, gene2) {
   test <- fisher.test(m)
   data.frame(odds.ratio = test$estimate, p.val = test$p.value)
 }
+
+
+# side note : melt and acast -----
+
+
+
+
 
 # let's summarize our tests
 test.results <- co.occurences %>%
@@ -193,7 +217,7 @@ test.results <- co.occurences %>%
   dplyr::rowwise() %>% # note this is the first time we are seeing this, please check the documentation
   dplyr::mutate(is_powered_enough(gene1, gene2)) %>% # this is a handy trick
   dplyr::ungroup() %>% 
-  dplyr::mutate(q.val = p.adjust(p.val, method = "BH"))
+  dplyr::mutate(q.val = p.adjust(p.val, method = "BH")) # !!!!
 
 test.results %>% head
 
@@ -234,9 +258,25 @@ is_powered_enough("TP53", "KRAS")
 
 # Vignette 2: How many MDM2 inhibitors exist in Repurposing Primary and do they work? ----
 
+
+x <- x %>% 
+  f() %>% 
+  g()
+
+x %<>% 
+  f() %>% 
+  g()
+
 # simplify the column names
 colnames(OmicsExpressionProteinCodingGenesTPMLogp1)  %<>% word()
+# equivalent to
+# colnames(OmicsExpressionProteinCodingGenesTPMLogp1)  <- word(colnames(OmicsExpressionProteinCodingGenesTPMLogp1))
+
 colnames(OmicsSomaticMutationsMatrixHotspot)  %<>% word()
+
+
+prism.bootcamp %>% View
+
 
 # list of MDM2 inhibitors in Rep. Primary dataset
 MDM2.inhibitors <- prism.bootcamp %>% 
@@ -244,7 +284,6 @@ MDM2.inhibitors <- prism.bootcamp %>%
                 screen == "REP.PRIMARY") 
 
 
-MDM2.inhibitors
 
 # tidying the PRISM data for the compounds, MDM2 expression and TP53 mutation status
 MDM2i.data <- prism.matrix.bootcamp[, MDM2.inhibitors$column_name] %>%
@@ -255,6 +294,10 @@ MDM2i.data <- prism.matrix.bootcamp[, MDM2.inhibitors$column_name] %>%
                           TP53.HS.Mutation = OmicsSomaticMutationsMatrixHotspot[,"TP53"])) %>%
   dplyr::inner_join(tibble(ModelID = rownames(OmicsExpressionProteinCodingGenesTPMLogp1),
                            MDM2.Expression = OmicsExpressionProteinCodingGenesTPMLogp1[,"MDM2"]))
+
+
+MDM2i.data %>% 
+  head
 
 
 # a faceted scatter plot
@@ -289,8 +332,15 @@ primary.profiles <- prism.bootcamp %>%
 
 PRISM.primary <- prism.matrix.bootcamp[,primary.profiles]
 
+
+
+C <- cor(PRISM.primary, use = "p")
+
 # let's compute the correlation among compounds
 C = WGCNA::cor(PRISM.primary, use = "p")
+
+
+cor(C)
 
 # create a umap with default parameters
 umap.data <- uwot::umap(as.dist(1 - C), min_dist=0.0)
