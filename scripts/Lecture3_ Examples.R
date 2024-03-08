@@ -201,11 +201,6 @@ is_powered_enough<- function(gene1, gene2) {
 }
 
 
-# side note : melt and acast -----
-
-
-
-
 
 # let's summarize our tests
 test.results <- co.occurences %>%
@@ -328,22 +323,22 @@ MDM2i.data %>%
 
 primary.profiles <- prism.bootcamp %>% 
   dplyr::filter(screen == "REP.PRIMARY") %>% 
-  .$column_name
+  .$column_name 
 
 PRISM.primary <- prism.matrix.bootcamp[,primary.profiles]
 
 
 
-C <- cor(PRISM.primary, use = "p")
 
 # let's compute the correlation among compounds
-C = WGCNA::cor(PRISM.primary, use = "p")
+C <- cor(PRISM.primary, use = "p")
 
 
-cor(C)
+corner(C)
 
 # create a umap with default parameters
-umap.data <- uwot::umap(as.dist(1 - C), min_dist=0.0)
+umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0,
+                        n_neighbors = 4) # !! 
 
 umap.data %>% 
   as.tibble() %>% 
@@ -390,13 +385,25 @@ MDM2.inhibitors %>% head
 
 X = OmicsExpressionProteinCodingGenesTPMLogp1
 y = prism.matrix.bootcamp[,"BRD-K62627508-001-01-5::2.5::HTS"]
-y = y[is.finite(y)]
 
-cl <- intersect(names(y), rownames(X))
-result <- WGCNA::corAndPvalue(X[cl,], y[cl], use = "pairwise.complete")
-result <- tibble(cor = result$cor[,1], p = result$p[1,], q = p.adjust(p, method = "BH"),
-       gene = rownames(result$cor)) 
+# Here we define a simple corAndPValue function
+corAndPValue <- function(X, y){
+  y <- y[is.finite(y)]
+  cl = intersect(rownames(X), names(y))
+  r = c(cor(X[cl, ], y[cl], use = "p"))
+  n = apply(X[cl, ] * y[cl],2,function(x) sum(is.finite(x)))
+  z = r * sqrt(n-2) / sqrt(1-r^2)
+  p= pt(abs(z), n-2, lower.tail = FALSE)
+  data.frame(cor =r,
+             p.value = p,
+             q.value = p.adjust(p, method = "BH"))
+}
 
+result <- corAndPValue(X,y) %>%
+  dplyr::mutate(gene = colnames(X))
+
+result %>% 
+  head
 
 # I am leaving creating the actual volcano plot as an exercise.
 
@@ -414,7 +421,6 @@ result %>%
   theme_base(base_size = 12, base_family = "GillSans") +
   labs(x = "Rank", y = "Pearson Correlation", 
        title = "Expression Correlates of Idasanutlin")
-
 
 
 # Vignette 5: List MNNs between genetic and chemical dependencies ----
