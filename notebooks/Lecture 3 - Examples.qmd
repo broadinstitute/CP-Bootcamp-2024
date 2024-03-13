@@ -1,0 +1,702 @@
+---
+title: "Lecture 3 - Examples"
+author: "Mustafa Anil Kocak"
+format: html
+editor: visual
+---
+
+::: panel-tabset
+## Introduction
+
+We start by loading the necessary libraries:
+
+```{r}
+#| warning: false
+#| message: false
+
+library(tidyverse)
+library(magrittr)
+library(useful)
+library(scales)
+library(ggthemes)
+library(ggrepel)
+library(taigr)
+library(ggpubr)
+library(uwot)
+library(ggpubr)
+```
+
+Do not forget to specify the taigaclient (please change the path below for your own setup)
+
+```{r}
+# make sure to edit this line:
+options(taigaclient.path=path.expand("/Users/mkocak/anaconda3/envs/taigapy/bin/taigaclient"))
+```
+
+Additionally if you have a problem with uwot::umap() function, please try to run these two lines (just once) to install Matrix and irlba libraries from their source codes:
+
+```{r}
+#| eval: false
+
+install.packages("Matrix", type = "source")
+install.packages("irlba", type = "source")
+```
+
+## Taiga Links
+
+Please check out [Skyros download page](https://cds.team/depmap/download/all/) for detailed information and other datasets (e.g. Proteomics, RNAi, miRNA, etc.)
+
+**Cell line metadata:** This table contains depmap_id's ccle_name's and all the relevant cell line information, like OncoTree annotations,
+
+```{r}
+#| eval: false
+
+Model <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='Model')
+```
+
+**Genetic dependencies**: Matrices indexed by cell line (by depmap_id) and genes. Files ending with "GeneEffect" are scaled between -1 (median of essential genes) and 0 (median of non-essentials).\
+\
+"CRISRGeneDependency" matrix contains the dependency probabilities (1 means very likely to be a dependency and 0 means very likely to be a non-dependency)
+
+```{r}
+#| eval: false
+
+CRISPRGeneDependency <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='CRISPRGeneDependency')
+CRISPRGeneEffect <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='CRISPRGeneEffect')
+OrganoidGeneEffect <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OrganoidGeneEffect')
+```
+
+\
+**Omics Datasets**:
+
+```{r}
+#| eval: false
+
+# Copy Number Alterations
+OmicsAbsoluteCNGene <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsAbsoluteCNGene')
+OmicsArmLevelCNA <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsArmLevelCNA')
+OmicsCNGene <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsCNGene')
+
+# Gene Expression (by gene and by gene set)
+OmicsExpressionGeneSetEnrichment <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsExpressionGeneSetEnrichment')
+OmicsExpressionProteinCodingGenesTPMLogp1 <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsExpressionProteinCodingGenesTPMLogp1')
+
+# Fusions
+OmicsFusionFiltered <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsFusionFiltered')
+
+# Mutation table and binary matrices for hotspot and binary mutations
+OmicsSomaticMutations <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSomaticMutations')
+OmicsSomaticMutationsMatrixDamaging <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSomaticMutationsMatrixDamaging')
+OmicsSomaticMutationsMatrixHotspot <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSomaticMutationsMatrixHotspot')
+
+# Loss of Heterozygosity
+OmicsLoH <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsLoH')
+
+# Other omics signatures: Aneuploidy, MSI, CIN, etc.
+OmicsSignatures <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSignatures')
+
+# Structural variants
+OmicsStructuralVariants <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsStructuralVariants')
+```
+
+**PRISM Datasets**:
+
+```{r}
+#| eval: false
+
+# This is the compound meta-data used by the depmap portal, it is a busy table but it can become handy, the following transformations are cleaning and trimming it little bit
+compound.metadata <- load.from.taiga(data.name='compound-metadata-de37', data.version=23, data.file='compound_metadata') %>% 
+  dplyr::distinct(Drug.Name,
+                  IDs, MOA, 
+                  repurposing_target, 
+                  Synonyms) %>% 
+  dplyr::rename(Target = repurposing_target) %>%
+  tidyr::separate_rows(IDs, sep = ";") 
+
+
+
+# PRISM Repurposing log2fold-change viabilities (from last year)
+Repurposing.Column.Meta <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_bootcamp')
+Repurposing.Matrix <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_matrix_bootcamp')
+
+
+
+# PRISM Oncology Reference Set
+OncRef.Compound.List <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=14, data.file='PRISM_Oncology_Reference_23Q4-Compound_List')
+OncRef.AUC.matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='AUC_matrix') %>%
+  t()  # Note this needs to be transposed.
+OncRef.LFC.Matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='PRISM_Oncology_Reference_23Q4_LFC_Matrix')
+
+```
+
+**Miscellanous**:
+
+```{r}
+#| eval: false
+
+# Methylation per gene 
+MethylationExpressionImpactBroad <- load.from.taiga(data.name='internal-beta-features-7130', data.version=31, data.file='MethylationExpressionImpactBroad')
+MethylationExpressionImpactSanger <- load.from.taiga(data.name='internal-beta-features-7130', data.version=31, data.file='MethylationExpressionImpactSanger')
+
+# Driver alterations (by Mike Burger)
+DriverGeneFunctionalAlterations <- load.from.taiga(data.name='internal-beta-features-7130', data.version=31, data.file='DriverGeneFunctionalAlterations')
+
+# Harmonized Expression Dataset : GTEx, TCGA & CCLE (2020, by Kevin Zhang)
+harmonized.TCGA.GTEx.CCLE <- load.from.taiga(data.name='harmonized-tcga-gtex-target-and-ccle-baseline-expression-280a', data.version=8, data.file='harmonized_TCGA_GTEx_CCLE')
+metadata.TCGA.GTEx.CCLE <- load.from.taiga(data.name='harmonized-tcga-gtex-target-and-ccle-baseline-expression-280a', data.version=8, data.file='metadata_TCGA_GTEx_CCLE')
+protein.coding.genes <- load.from.taiga(data.name='harmonized-tcga-gtex-target-and-ccle-baseline-expression-280a', data.version=8, data.file='protein_coding_genes') # little bit outdated
+```
+
+\
+
+## Vignette 1: Co-occurring Mutations
+
+In this vignette, we will start looking into the binary HotSpot mutation matrix and try to find pairs of mutations that appeared more or less frequent than expected.\
+\
+First, let's load the relevant data from taiga:\
+
+```{r}
+OmicsSomaticMutationsMatrixHotspot <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSomaticMutationsMatrixHotspot')
+
+# dimensions of the matrix
+paste0("Dimensions :" , dim(OmicsSomaticMutationsMatrixHotspot))
+
+
+# take a peek at the top left corner of the matrix (to check the column and rownames)
+corner(OmicsSomaticMutationsMatrixHotspot)
+
+# simplify the column names
+colnames(OmicsSomaticMutationsMatrixHotspot)  %<>% word()
+```
+
+Next, we will start with a small concrete example: KRAS and EGFR
+
+```{r}
+# Let's pick the relevant columns and put into a data frame (tibble)
+EGFR.KRAS.mutations <- OmicsSomaticMutationsMatrixHotspot[, c("EGFR", "KRAS")] %>% 
+  as_tibble() %>% 
+  dplyr::mutate(ModelID = rownames(OmicsSomaticMutationsMatrixHotspot)) 
+
+# Quick check 
+EGFR.KRAS.mutations %>% 
+  head()
+
+# What does 2 mean?
+EGFR.KRAS.mutations %>% 
+  dplyr::count(EGFR, KRAS)
+
+# Let's keep it simple: 1 for mutant, 0 for not-mutant
+EGFR.KRAS.mutations <- EGFR.KRAS.mutations %>%
+  dplyr::mutate(EGFR  = EGFR > 0, KRAS = KRAS > 0)
+
+```
+
+Let's create a contingency table and apply [Fisher's exact test](https://en.wikipedia.org/wiki/Fisher%27s_exact_test), check ?fisher.test() for details:
+
+```{r}
+# Is this an implicit NA? 
+EGFR.KRAS.mutations %>% 
+  dplyr::count(EGFR, KRAS)
+
+# Do we have enough power to support our claim?
+EGFR.KRAS.mutations %>% 
+  dplyr::count(EGFR, KRAS) %>%
+  tidyr::complete(EGFR,KRAS, fill = list(n = 0)) %>% 
+  .$n %>% matrix(2) %>%   
+  fisher.test()
+```
+
+Seems like we don't have enough power to reject the null hypothesis (chance) for the absence of simultaneous KRAS and EGFR hotspot mutations on any of the cell lines.
+
+Let's look for other pairs of genes systematically. We will first create a co-occurence matrix among genes that has at least 5 mutant cell line among our 2145 lines.
+
+```{r}
+
+# first let's simplify our mutation matrix for relatively common mutations 
+# and binarize it
+OmicsSomaticMutationsMatrixHotspot <- OmicsSomaticMutationsMatrixHotspot > 0
+
+# and let's drop genes that doesn't have at least 5 mutant cell lines
+OmicsSomaticMutationsMatrixHotspot <- OmicsSomaticMutationsMatrixHotspot[, apply(OmicsSomaticMutationsMatrixHotspot, 2, sum) > 4] 
+
+# let's get the pairwise co-occurance counts
+co.occurences <- crossprod(OmicsSomaticMutationsMatrixHotspot) 
+
+# Here is how the co-occurence matrix looks like
+corner(co.occurences)
+```
+
+Next, let's write a small helper function that takes a slice of the co-occurence matrix given two genes
+
+```{r}
+
+# total number of samples
+n = nrow(OmicsSomaticMutationsMatrixHotspot)
+
+# a  helper function to extract the contingency matrix from the co-occurence matrix
+contingency_matrix <- function(gene1, gene2) {
+  # note that we are keeping n and co.occurances matrix as global variables
+  n4 = co.occurences[gene1, gene2]
+  n3 = co.occurences[gene2, gene2] - n4
+  n2 = co.occurences[gene1, gene1] - n4
+  n1 = n - n2 - n3 - n4
+  m <- matrix(c(n1,n2,n3,n4),2)
+  colnames(m) <- paste0(gene2, c("_WT", "_MUT"))
+  rownames(m) <- paste0(gene1, c("_WT", "_MUT"))
+  m
+}
+
+# same sanity checks
+contingency_matrix("EGFR", "KRAS")
+contingency_matrix("BRAF", "PTEN")
+```
+
+Next, we write another function that takes the contingency matrix and returns the results of the Fisher's exact test (odd's ratio and p-value):
+
+```{r}
+# another helper to wrap the fisher's test 
+is_powered_enough<- function(gene1, gene2) {
+  m <- contingency_matrix(gene1, gene2)
+  test <- fisher.test(m)
+  data.frame(odds.ratio = test$estimate, p.val = test$p.value)
+}
+```
+
+Finally, we list all pairs of the genes and call our new function to have a summary table:
+
+```{r}
+
+# let's summarize our tests
+test.results <- co.occurences %>%
+  reshape2::melt(varnames = c("gene1", "gene2")) %>%  # melt is a common function, note the column types
+  dplyr::mutate(gene1 = as.character(gene1), 
+                gene2 = as.character(gene2)) %>% 
+  dplyr::select(-value) %>%
+  dplyr::filter(gene1 < gene2) %>% 
+  dplyr::rowwise() %>% # note this is the first time we are seeing this, please check the documentation
+  dplyr::mutate(is_powered_enough(gene1, gene2)) %>% # this is a handy trick
+  dplyr::ungroup() %>% 
+  dplyr::mutate(q.val = p.adjust(p.val, method = "BH")) # correcting for multiple-hypothesis correction, please check out ?p.adjust()
+
+test.results
+```
+
+Finally, we create a volcano plot based on the final table
+
+```{r}
+
+p <- test.results %>% 
+  dplyr::mutate(highlight = (q.val < 0.2) | (odds.ratio > 300), 
+                control = (gene1 =="EGFR" ) & (gene2 == "KRAS"),
+                label = paste0(gene1, "/", gene2)) %>% 
+  ggplot(aes(x = log2(odds.ratio), 
+             y = -log10(q.val),
+             alpha = highlight|control,
+             color = highlight,
+             pair = label)) +
+    geom_point(show.legend = F) +
+    geom_hline(yintercept = -log10(0.2), lty = 2, lwd = 1) + 
+    geom_text_repel(aes(label = ifelse(highlight | control,  label, NA)), 
+                    size = 3,
+                    show.legend = F) +
+  theme_bw() + scale_color_wsj() +
+  labs(x = "log2(Odds Ratio)", y = "-log10(Q)", title = "Co-Occurence of Hotspot Mutations Accross DepMap Cell Line Panel")
+
+p
+```
+
+You can also quickly create an interactive version (hover over the points to see labels):
+
+```{r}
+plotly::ggplotly(p + theme(legend.position = "none"),
+                tooltip = c("x", "y", "label"))
+```
+
+Lastly, we can quickly check some of the pairs and create a quick heatmap:
+
+```{r}
+# Some sanity checks
+contingency_matrix("POLE", "XPO1")
+contingency_matrix("BRAF", "KRAS")
+contingency_matrix("APC", "KRAS")
+contingency_matrix("KRAS", "NRAS")
+
+# Two of the most common mutations
+contingency_matrix("TP53", "KRAS")
+is_powered_enough("TP53", "KRAS")
+
+# A quick heatmap
+short.list <- c("KRAS", "NRAS", "BRAF", "EGFR", "TP53", "PIK3R1", "APC", "POLE", "XPO1")
+co.occurences[short.list, short.list]
+pheatmap::pheatmap(co.occurences[short.list, short.list],
+                   display_numbers = TRUE)
+
+# This is admittedly primitive! 
+# Think about how you can improve it? 
+```
+
+Our analysis here was admittedly primitive, please think about how can you improve it?\
+\
+Also, let's remove the mutation and co-occurence matrices we created from memory before moving on to the next vignette.
+
+```{r}
+rm(OmicsSomaticMutationsMatrixHotspot, co.occurences)
+```
+
+## 
+
+## Vignette 2: MDM2 Inhibitors in Repurposing
+
+In this vignette, we will pull compounds targeting MDM2 from Repurposing Primary (single dose at 2.5uM) and examine their response against MDM2 expression and TP53 status.
+
+First, let's download expression and mutation datasets, along with Repurposing data.
+
+```{r}
+OmicsExpressionProteinCodingGenesTPMLogp1 <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsExpressionProteinCodingGenesTPMLogp1')
+OmicsSomaticMutationsMatrixDamaging <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsSomaticMutationsMatrixDamaging')
+
+# simplify the column names
+colnames(OmicsExpressionProteinCodingGenesTPMLogp1)  %<>% word()
+colnames(OmicsSomaticMutationsMatrixDamaging)  %<>% word()
+
+
+# PRISM Repurposing log2fold-change viabilities (from last year)
+Repurposing.Column.Meta <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_bootcamp')
+Repurposing.Matrix <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_matrix_bootcamp')
+```
+
+Next, let's pull compounds of interest and the relevant columns of the omics data. We will organize them into a single data frame before visualization
+
+```{r}
+
+# list of MDM2 inhibitors in Rep. Primary dataset
+MDM2.inhibitors <- Repurposing.Column.Meta %>% 
+  dplyr::filter(str_detect(Target, "MDM2"),
+                screen == "REP.PRIMARY") 
+
+
+
+# tidying the PRISM data for the compounds, MDM2 expression and TP53 mutation status
+MDM2i.data <- Repurposing.Matrix[, MDM2.inhibitors$column_name] %>%
+  reshape2::melt(varnames = c("ModelID", "column_name"), value.name = "LFC") %>% 
+  dplyr::filter(is.finite(LFC)) %>% 
+  dplyr::left_join(MDM2.inhibitors) %>%
+  dplyr::inner_join(tibble(ModelID = rownames(OmicsSomaticMutationsMatrixDamaging),
+                          TP53.Dam.Mutation = OmicsSomaticMutationsMatrixDamaging[,"TP53"])) %>%
+  dplyr::inner_join(tibble(ModelID = rownames(OmicsExpressionProteinCodingGenesTPMLogp1),
+                           MDM2.Expression = OmicsExpressionProteinCodingGenesTPMLogp1[,"MDM2"]))
+
+
+MDM2i.data %>% 
+  head()
+```
+
+Finally, let's create a faceted scatter plot, please think about alternative ways of plotting this data:
+
+```{r}
+MDM2i.data %>%
+  dplyr::mutate(TP53 = ifelse(TP53.Dam.Mutation, "Mutant", "WT"),
+                FC = pmin(1,2^LFC)) %>% 
+   ggplot(aes(x = MDM2.Expression, y = FC,
+             color = TP53, shape = TP53)) + 
+  geom_point(size = 1, alpha = .2) +
+  stat_cor(show.legend = F, size = 3, label.x = 5) + 
+  geom_smooth(method = "lm", show.legend = TRUE, se = FALSE, lwd = .5) + 
+  facet_wrap(Name ~ .) + 
+  labs(color = "TP53 Status", shape = "TP53 Status",
+       x = "MDM2 Expression  - log2(1+TPM)", y = "Fold Change Viability") +
+  theme_base(base_size = 12) + scale_color_wsj() +
+  theme(legend.position = c(0.8, 0.1)) + 
+  coord_cartesian(ylim =c(0,1)) + 
+  scale_shape_manual(values = c(1,4))
+```
+
+Let's remove the big datasets from our environment.
+
+```{r}
+rm(OmicsExpressionProteinCodingGenesTPMLogp1, OmicsSomaticMutationsMatrixDamaging, Repurposing.Column.Meta, Repurposing.Matrix)
+```
+
+## Vignette 3: UMAP of Repurposing Primary
+
+This time we will create a basic correlation-based UMAP of Repurposing Primary dataset where each compound will be representing a compound, and highlight MDM2 inhibitors on the UMAP
+
+```{r}
+# load the PRISM data
+Repurposing.Column.Meta <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_bootcamp')
+Repurposing.Matrix <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_matrix_bootcamp')
+
+# Choose the columns that corresponds to the PRIMARY dataset
+primary.profiles <- Repurposing.Column.Meta %>% 
+  dplyr::filter(screen == "REP.PRIMARY") %>% 
+  .$column_name 
+
+PRISM.primary <- Repurposing.Matrix[,primary.profiles]
+```
+
+Next, create a correlation matrix among compounds
+
+```{r}
+# use = "p" tells us to use all "pairwise complete observations", please see ?cor()
+C <- cor(PRISM.primary, use = "p")
+corner(C)
+```
+
+Create a umap with default parameters: (Note if the umap function gives an error please re-install "Matrix" and "irlba" libraries from their sources using the lines from the introduction)
+
+```{r}
+# Create a umap with default parameters: please check out the other paramters, especially n_neighbors is a critical one 
+umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0, )  
+
+umap.data %<>% 
+  as.tibble() %>% 
+  dplyr::mutate(column_name = rownames(umap.data)) %>% 
+  dplyr::left_join(Repurposing.Column.Meta)
+```
+
+Let's create some visuals using the umap table
+
+```{r}
+# A static scatter plot
+umap.data %>% 
+  dplyr::mutate(highlight = str_detect(Target, "MDM2")) %>% 
+  ggplot(aes(x = V1, y = V2, 
+             alpha = highlight, 
+             color = highlight)) +
+  geom_point(size = 1 , shape = 1, show.legend = F) +
+  geom_text_repel(aes(label  = ifelse(highlight, Name, NA)),
+                  size = 2, max.overlaps = 20, show.legend = F) +
+  theme_few() + scale_color_wsj() +
+  scale_alpha_manual(values = c(.3,1)) + 
+  labs(x = "UMAP1", y = "UMAP2", 
+       title = "MDM2 Inhibitors in PRISM Repurposing (Primary)")
+
+
+# An interactive one 
+p <- umap.data %>% 
+  as.tibble() %>%
+  dplyr::mutate(column_name = rownames(umap.data)) %>% 
+  dplyr::left_join(Repurposing.Column.Meta) %>% 
+  ggplot(aes(x = V1, y = V2, 
+             name = Name,
+             moa = MOA,
+             target = Target)) +
+  geom_point(size = .5 , alpha = .5, shape = 1, show.legend = F) +
+  theme_few() + scale_color_fivethirtyeight() 
+
+
+plotly::ggplotly(p)
+# Exercise: 
+# What about the most common 8 MOA's? 
+# Should we filter our pan-toxic or inert compounds before we start? If so 
+# how would you do that?
+```
+
+As an exercise try following:
+
+-   Can you overlay the toxicity of each compoundas colors? (You can define toxicity as how many cell lines has LFC \< -2)
+
+-   Which are the most common 8 MOA's in this dataset?
+
+-   Repeat the same exercise by removing pan-toxic or inert compounds before we calculate the UMAP coordinates.
+
+## Vignette 4: Volcano and Waterfall Plots
+
+In this vignette we will run a quick correlation analysis and represent the results using waterfall and volcano plots.\
+\
+As usual, we start with downloading and organizing our data: Idasanutlin profile from PRISM Repurposing Primary and DepMap expression data.
+
+```{r}
+# expression
+OmicsExpressionProteinCodingGenesTPMLogp1 <- load.from.taiga(data.name='internal-23q4-ac2b', data.version=68, data.file='OmicsExpressionProteinCodingGenesTPMLogp1')
+colnames(OmicsExpressionProteinCodingGenesTPMLogp1)  %<>% word()
+
+# PRISM Repurposing 
+Repurposing.Column.Meta <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_bootcamp')
+Repurposing.Matrix <- load.from.taiga(data.name='prism-repurposing-combined-matrix-0c75', data.version=2, data.file='prism_matrix_bootcamp')
+
+
+X = OmicsExpressionProteinCodingGenesTPMLogp1
+y = Repurposing.Matrix[,"BRD-K62627508-001-01-5::2.5::HTS"] # Check the meta-data to see what is this compound?
+```
+
+Next, we write a simple function that computes the correlations between each column of X and y; along with the corresponding p values. If you have WGCNA package installed on your R environment, you can also use WGCNA::corAndPValue() function too.
+
+```{r}
+
+# Here we define a simple corAndPValue function, note that the rownames of X and names of y should be coming from same set.
+corAndPValue <- function(X, y){
+  y <- y[is.finite(y)]
+  cl = intersect(rownames(X), names(y))
+  r = c(cor(X[cl, ], y[cl], use = "p"))
+  n = apply(X[cl, ] * y[cl],2,function(x) sum(is.finite(x)))
+  z = r * sqrt(n-2) / sqrt(1-r^2)
+  p= pt(abs(z), n-2, lower.tail = FALSE)
+  data.frame(cor =r,
+             p.value = p,
+             q.value = p.adjust(p, method = "BH"))
+}
+```
+
+Here we call our new function on and create a simple volcano plot. I am leaving decorating this plot as an exercise.
+
+```{r}
+result <- corAndPValue(X,y) %>%
+  dplyr::mutate(gene = colnames(X))
+
+result %>% 
+  ggplot() +
+  geom_point(aes(x = cor, y = -log10(q.value)))
+```
+
+Finally, let's finish with a waterfall plot (ranks vs correlation):
+
+```{r}
+result %>%
+  dplyr::filter(!is.na(cor)) %>% 
+  dplyr::arrange(desc(cor)) %>%
+  dplyr::mutate(rank = 1:n(), n = n()) %>%
+  dplyr::mutate(highlight = (rank <= 5) | (rank > (n-10)) )%>% 
+  ggplot(aes(x = rank, y= cor, alpha = highlight)) +
+  geom_point(aes(size = highlight), shape = 1, show.legend = F) +
+  geom_text_repel(aes(label = ifelse(highlight, gene, NA)),
+                  size = 2, show.legend = F, max.overlaps = 20) +
+  scale_size_manual(values = c(.5,3)) + 
+  theme_base(base_size = 12, base_family = "GillSans") +
+  labs(x = "Rank", y = "Pearson Correlation", 
+       title = "Expression Correlates of Idasanutlin")
+```
+
+```{r}
+rm(X,y, Repurposing.Column.Meta, Repurposing.Matrix, OmicsExpressionProteinCodingGenesTPMLogp1)
+```
+
+## Vignette 5: OncRef Dataset
+
+Here we will take a high level look at the PRISM Oncology Reference Set. \
+\
+First let's load the AUC (normalized area under the dose-response curve) matrix and the compound metadata.
+
+```{r}
+OncRef.AUC.matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='AUC_matrix') %>%
+  t()
+
+compound.metadata <- load.from.taiga(data.name='compound-metadata-de37', data.version=23, data.file='compound_metadata') %>% 
+  dplyr::distinct(Drug.Name,
+                  IDs, MOA, 
+                  repurposing_target, 
+                  Synonyms) %>% 
+  dplyr::rename(Target = repurposing_target) %>%
+  tidyr::separate_rows(IDs, sep = ";") 
+
+
+# let's replace column names of AUC matrix with drug names
+colnames(OncRef.AUC.matrix) <- tibble(colnames = colnames(OncRef.AUC.matrix)) %>% 
+  dplyr::left_join(compound.metadata %>%
+                     dplyr::distinct(Drug.Name, IDs),
+                   by = c("colnames" = "IDs")) %>%
+  .$Drug.Name
+
+OncRef.AUC.matrix %>% 
+  corner
+```
+
+Let's use the same method we learned in Vignette 3 to create a quick umap:
+
+```{r}
+OncRef.AUC.Cor <- cor(OncRef.AUC.matrix, use = "p")
+
+OncRef.umap <- uwot::umap(as.dist(1-OncRef.AUC.Cor),
+           min_dist = 0, n_neighbors = 2) 
+```
+
+Next, we will cluster our compounds into C (= 30 below) clusters using the distances on the umap first and then using the correlation matrix we computed before umap. Check out ?hclust() for hiearchical clustering.
+
+```{r}
+# clustering compounds into C clusters
+C = 30
+
+umap_clusters = OncRef.umap %>%
+  dist() %>% 
+  hclust() %>%
+  cutree(k = C)
+
+correlation_clusters <- as.dist(1-OncRef.AUC.Cor) %>% 
+  hclust() %>%
+  cutree(k = C)
+
+# gather clustering indices, umap locations and meta-data in a single table
+OncRef.umap <- OncRef.umap %>%
+  as_tibble() %>% 
+  dplyr::mutate(Drug.Name = colnames(OncRef.AUC.matrix)) %>%
+  dplyr::left_join(compound.metadata %>% 
+                     dplyr::select(-IDs) %>% 
+                     dplyr::distinct()) %>%
+  dplyr::left_join(tibble(Drug.Name = names(umap_clusters),
+                          umap_cluster_id = umap_clusters)) %>%
+  dplyr::left_join(tibble(Drug.Name = names(correlation_clusters),
+                          correlation_cluster_id = correlation_clusters))
+
+OncRef.umap %>% 
+  head
+```
+
+Let's plot the umap and overlay both types of clusters.
+
+```{r}
+p1 = OncRef.umap %>%
+  ggplot() +
+  geom_point(aes(x = V1, 
+                 y = V2,
+                 Drug.Name = Drug.Name,
+                 MOA = MOA,
+                 color = as.factor(umap_cluster_id))) +
+  labs(color = "UMAP Clusters")
+
+p2 = OncRef.umap %>%
+  ggplot() +
+  geom_point(aes(x = V1, 
+                 y = V2,
+                 Drug.Name = Drug.Name,
+                 MOA = MOA,
+                 color = as.factor(correlation_cluster_id))) +
+  labs(color = "Correlation Clusters")
+
+
+cowplot::plot_grid(p1,p2, nrow = 1)
+```
+
+Interactive version (try to add both cluster indices on to the tooltip):
+
+```{r}
+plotly::ggplotly(p1)
+```
+
+As we saw before, umaps are not perfect representations of correlation matrices. For small enough matrices, we can use heatmaps instead. See the two examples below:
+
+```{r}
+OncRef.AUC.Cor %>%
+  pheatmap::pheatmap(show_rownames = FALSE,
+                     treeheight_row = 0,
+                     fontsize_col = 6,
+                     color = colorRampPalette(c("navy", "white", "firebrick3"))(50))
+
+
+heatmaply::heatmaply(OncRef.AUC.Cor,
+                     show_dendrogram = c(TRUE, FALSE), 
+                     xlab = "", ylab = "", 
+                     symm = TRUE,
+                     #scale_fill_gradient_fun = ggplot2::scale_fill_gradient2(
+                     #  high = "firebrick", mid="white",low = "navy", midpoint = 0, 
+                     #  limits = c(-1, 1)),
+                     showticklabels = c(FALSE,FALSE),
+                     heatmap_layers = theme(axis.line=element_blank())
+                     )
+```
+
+Please try to include some annotations (check annotation_row and annotation_col arguments for pheatmap() function and see the examples in the documentation).
+
+Also for more sophisticated heatmaps please see ComplexHeatmap package [here](https://jokergoo.github.io/ComplexHeatmap-reference/book/).
+:::
+
+## 

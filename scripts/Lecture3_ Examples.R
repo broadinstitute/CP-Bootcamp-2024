@@ -332,13 +332,14 @@ PRISM.primary <- prism.matrix.bootcamp[,primary.profiles]
 
 # let's compute the correlation among compounds
 C <- cor(PRISM.primary, use = "p")
+C <- WGCNA::cor(PRISM.primary, use = "p")
+?WGCNA
 
 
 corner(C)
 
 # create a umap with default parameters
-umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0,
-                        n_neighbors = 4) # !! 
+umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0) # !! 
 
 umap.data %>% 
   as.tibble() %>% 
@@ -403,6 +404,8 @@ result <- corAndPValue(X,y) %>%
   dplyr::mutate(gene = colnames(X))
 
 result %>% 
+  ggplot() +
+  geom_point(aes(x = cor, y = -log10(q.value)))
   head
 
 # I am leaving creating the actual volcano plot as an exercise.
@@ -433,7 +436,8 @@ CRISPRGeneEffect %>% corner
 
 # Let's compute the correlations - this step is computationally heavy
 cl = intersect(rownames(PRISM.primary), rownames(CRISPRGeneEffect))
-C <- WGCNA::cor(PRISM.primary[cl,], CRISPRGeneEffect[cl, ], use = "p")
+C <- cor(PRISM.primary[cl,], CRISPRGeneEffect[cl, ], use = "p")
+# C <- WGCNA::cor(PRISM.primary[cl,], CRISPRGeneEffect[cl, ], use = "p")
 corner(C)
 
 # Let's compute the ranks for both genes and compounds
@@ -443,11 +447,12 @@ rank.genes <- apply(-C,2, rank)
 # keep only the top 3 most correlated neighbors
 rank.compounds.shortlist <- rank.compounds %>% 
   reshape2::melt(varnames = c("gene", "column_name"), value.name = "rank.compound") %>%
-  dplyr::filter(rank.compound <= 3)  # we are interested only in top 3 ranks
+  dplyr::filter(rank.compound <= 10)  # we are interested only in top 3 ranks
 
 rank.genes.shortlist <- rank.genes %>% 
   reshape2::melt(varnames = c("column_name", "gene"), value.name = "rank.gene") %>%
-  dplyr::filter(rank.gene <= 3) 
+  dplyr::filter(rank.gene <= 10) 
+
 
 mnns <- rank.genes.shortlist %>%
   dplyr::inner_join(rank.compounds.shortlist) %>%  
@@ -461,17 +466,18 @@ mnns %>%
 
 # how is our MDM inhibitors doing? 
 mnns %>%
-  dplyr::filter(str_detect(Target, "MDM2")) 
+  dplyr::filter(str_detect(Target, "MDM2")) %>%
+  View
 
 mnns %>%
-  dplyr::filter(gene == "MDM2")
+  dplyr::filter(gene == "MDM4")
 
 # What else can we do with MNNs?
 
 
 
 
-# Taking a high level look at ONCREF Dataset (WiP) ----- 
+# Vignette 6: Taking a high level look at ONCREF Dataset (WiP) ----- 
 
 OncRef.AUC.matrix <- load.from.taiga(data.name='prism-oncology-reference-set-23q4-1a7c', data.version=13, data.file='AUC_matrix') %>%
   t()
@@ -483,17 +489,23 @@ colnames(OncRef.AUC.matrix) <- tibble(colnames = colnames(OncRef.AUC.matrix)) %>
                    by = c("colnames" = "IDs")) %>%
   .$Drug.Name
 
+OncRef.AUC.matrix %>% 
+  corner
+
+
 # Let's quickly put together a umap: 
-
-
 OncRef.AUC.Cor <- cor(OncRef.AUC.matrix, use = "p")
 
 OncRef.umap <- uwot::umap(as.dist(1-OncRef.AUC.Cor),
            min_dist = 0, n_neighbors = 2) 
 
 
-C = 30
+OncRef.umap %>% 
+  corner
 
+
+# Clustering compounds into C clusters
+C = 30
 
 umap_clusters = OncRef.umap %>%
   dist() %>% 
@@ -505,10 +517,6 @@ correlation_clusters <- as.dist(1-OncRef.AUC.Cor) %>%
   cutree(k = C)
 
 
-
-
-
-
 OncRef.umap <- OncRef.umap %>%
   as_tibble() %>% 
   dplyr::mutate(Drug.Name = colnames(OncRef.AUC.matrix)) %>%
@@ -518,7 +526,32 @@ OncRef.umap <- OncRef.umap %>%
   dplyr::left_join(tibble(Drug.Name = names(umap_clusters),
                           umap_cluster_id = umap_clusters)) %>%
   dplyr::left_join(tibble(Drug.Name = names(correlation_clusters),
-                          umap_cluster_id = correlation_clusters))
+                          correlation_cluster_id = correlation_clusters))
+
+p1 = OncRef.umap %>%
+  ggplot() +
+  geom_point(aes(x = V1, 
+                 y = V2,
+                 Drug.Name = Drug.Name,
+                 MOA = MOA,
+                 color = as.factor(umap_cluster_id))) +
+  labs(color = "UMAP Clusters")
+
+p2 = OncRef.umap %>%
+  ggplot() +
+  geom_point(aes(x = V1, 
+                 y = V2,
+                 Drug.Name = Drug.Name,
+                 MOA = MOA,
+                 color = as.factor(correlation_cluster_id))) +
+  labs(color = "Correlation Clusters")
+
+
+cowplot::plot_grid(p1,p2, nrow = 1)
+
+p1 %>%
+  plotly::ggplotly()
+
 
 # A really quick heatmap - Add the cluster annotations
 
@@ -540,68 +573,17 @@ heatmaply::heatmaply(OncRef.AUC.Cor,
                      heatmap_layers = theme(axis.line=element_blank())
                      )
 
-# We know how to make a umap, let's add cluster annotations
+# Also check ComplexHeatmap::Heatmap ! 
 
 
 
-# Setting up a ready to use correlation volcano plot function -----
+install.packages("Matrix", type = "source")
+install.packages("irlba", type = "source")
+install.packages("WGCNA")
 
-robust_linear_model <- function(X, y, W = NULL) {
-  # W shouldn't have any NAs!!!
-  Y = matrix(y, dim(X)[1], dim(X)[2])
-  
-  # Centering X 
-  if(!is.null(W)){
-    W = cbind(1, W) 
-    H = diag(nrow(W)) - crossprod(t(W), tcrossprod(pracma::pinv(crossprod(W)), W))
-    
-    X.mask = is.na(X); y.mask = is.na(y); 
-    mask <- X.mask | y.mask
-    X[mask] = 0; Y[mask] = 0
-    X <- crossprod(H, X); X[mask] = NA
-    Y <- crossprod(H, Y); Y[mask] = NA
-    d = dim(W)[2] + 1
-  } else{
-    d = 2
-  }
-  
-  flag = apply(X, 2, function(x) var(x,na.rm = T)) 
-  Y <- Y[, flag > 0.001, drop = FALSE]
-  X <- X[, flag > 0.001, drop = FALSE] # this threshold is very arbitrary! 
-  
-  # this step is necessary due to the NA's in X !! 
-  X <- scale(X, center = TRUE, scale = FALSE)
-  Y <- scale(Y, center = TRUE, scale = FALSE)
-  
-  # Defining S and computing mean and variances 
-  S = X * Y
-  n = colSums(!is.na(S))
-  muS = colMeans(S, na.rm = T)
-  #sigmaS = apply(S, 2, function(x) sd(x, na.rm = T))
-  sigmaS = sqrt(rowMeans((t(S) - muS)^2, na.rm = T))
-  X[is.na(S)] = NA; Y[is.na(S)] = NA
-  varX = colMeans(X^2, na.rm = T)
-  varY = colMeans(Y^2, na.rm = T)
-  
-  # Estimation and inference
-  beta = muS / varX
-  rho = muS / sqrt(varX * varY)
-  p.val <- 2*pt(abs(sqrt(n-d) * muS/sigmaS), 
-                df = n-d, lower.tail = FALSE)
-  
-  
-  # Homoskedastic p-values: Only for comparison! 
-  p.val.homoskedastic <- 2*pt(sqrt( (n-d) /(1/rho^2-1)),
-                              df = n-d, lower.tail = FALSE)
-  # Experimental robustness score
-  ns = apply(S,2, function(s) sum(cumsum(sort(s/sum(s, na.rm = T), decreasing = T)) < 1, na.rm = T)) + 1
-  
-  return(list(x = names(beta), rho = rho, beta = beta,
-              p.val.rob = p.val, 
-              p.val = p.val.homoskedastic, 
-              n = n,
-              ns = ns))
-}
+uwot::umap(as.dist(1-OncRef.AUC.Cor),
+           min_dist = 0, n_neighbors = 4) 
+
 
 
 
