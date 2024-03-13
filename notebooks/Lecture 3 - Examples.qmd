@@ -445,8 +445,8 @@ corner(C)
 Create a umap with default parameters: (Note if the umap function gives an error please re-install "Matrix" and "irlba" libraries from their sources using the lines from the introduction)
 
 ```{r}
-# Create a umap with default parameters: please check out the other paramters, especially n_neighbors is a critical one 
-umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0, )  
+# Please check out the other parameters, especially n_neighbors is a critical one 
+umap.data <- uwot::umap(as.dist(1 - C), min_dist = 0, n_neighbors = 7)  
 
 umap.data %<>% 
   as.tibble() %>% 
